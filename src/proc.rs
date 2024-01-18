@@ -26,17 +26,9 @@ use process_memory::{ProcessHandle, TryIntoProcessHandle, Pid};
 use sysinfo::System;
 
 pub fn get_pid(name: &str) -> std::io::Result<i32> {
-    #[cfg(target_os = "windows")]
-    let name = {
-        let mut name = name.to_string();
-        name.push_str(".exe");
-        name
-    };
-    let name = name.to_owned();
-
     let mut system = System::new_all();
     system.refresh_all();
-    let pid = if let Some(proc) = system.processes_by_exact_name(&name).next() {
+    let pid = if let Some(proc) = system.processes_by_exact_name(name).next() {
         proc.pid().as_u32() as i32
     } else {
         return Err(std::io::ErrorKind::NotFound.into());
@@ -55,7 +47,7 @@ pub fn get_base_address(pid: i32) -> std::io::Result<usize> {
     };
 
     if process_handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-        eprintln!("Failed to get process handle for PID: {pid}, You probably lack the right to obtain this (run as Administrator)");
+        eprintln!("Failed to get process handle for PID: {pid}, You probably lack the right to obtain this (run as Administrator)\r");
         return Err(std::io::ErrorKind::PermissionDenied.into());
     }
 
@@ -98,7 +90,7 @@ pub fn get_base_address(pid: i32) -> std::io::Result<usize> {
     if unsafe {
         task_for_pid(mach_task_self(), pid, &mut task)
     } != KERN_SUCCESS {
-        eprintln!("Failed to get task for PID: {pid}, You probably lack the right to obtain this (run as root)");
+        eprintln!("Failed to get task for PID: {pid}, You probably lack the right to obtain this (run as root)\r");
         return Err(std::io::ErrorKind::PermissionDenied.into());
     }
 
@@ -125,7 +117,7 @@ pub fn get_base_address(pid: i32) -> std::io::Result<usize> {
         address += size;
     }
 
-    eprintln!("Could not find executable region for PID: {pid}");
+    eprintln!("Could not find executable region for PID: {pid}\r");
     Err(std::io::ErrorKind::NotFound.into())
 }
 

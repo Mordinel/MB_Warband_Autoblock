@@ -2,50 +2,94 @@ mod mem;
 mod proc;
 
 use std::time::Duration;
-
 use process_memory::Memory;
 use crossterm::{
-    execute,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal,
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers, KeyEventKind},
 };
 
 fn main() -> std::io::Result<()> {
-
-    execute!(std::io::stdout(), EnterAlternateScreen)?;
-    terminal::enable_raw_mode()?;
-
-    let pid = proc::get_pid("mb_warband")?;
-    println!("mb_warband PID: {pid}");
-
-    let base_addr = proc::get_base_address(pid)?;
-    println!("mb_warband base address: 0x{base_addr:x}");
-
-    let handle = proc::get_handle(pid)?;
-    println!("Got mb_warband process handle");
+    setup_terminal()?;
 
     #[cfg(target_os = "macos")]
+    let name = "Mount and Blade";
+    #[cfg(target_os = "windows")]
+    let name = "mb_warband.exe";
+
+    let pid = proc::get_pid(name)
+        .or_else(|e| {
+            eprintln!("Failed to get pid for {name}: {e}\r");
+            cleanup_terminal()?;
+            Err(e)
+        })?;
+    println!("`{name}` PID: {pid}\r");
+
+    let base_addr = proc::get_base_address(pid)
+        .or_else(|e| {
+            eprintln!("Failed to get base address for {pid}: {e}\r");
+            cleanup_terminal()?;
+            Err(e)
+        })?;
+    println!("`{name}` base address: 0x{base_addr:x}\r");
+
+    let handle = proc::get_handle(pid)
+        .or_else(|e| {
+            eprintln!("Failed to get handle for {pid}: {e}\r");
+            cleanup_terminal()?;
+            Err(e)
+        })?;
+    println!("Got `{name}` process handle\r");
+
+    #[cfg(target_os = "macos")]
+    let autoblock_path = vec![0x14651bc];
+
+    #[cfg(target_os = "windows")]
     let autoblock_path = vec![0x47c2f4];
 
-    #[cfg(not(target_os = "macos"))]
-    let autoblock_path = vec![0x47c2f4];
+    let autoblock_member = mem::resolve_pointer_path::<u32>(&handle, base_addr, &autoblock_path)
+        .or_else(|e| {
+            eprintln!("Failed to resolve pointer path {autoblock_path:?} in `{name}`: {e}\r");
+            cleanup_terminal()?;
+            Err(e)
+        })?;
 
-    let autoblock_member = mem::resolve_pointer_path::<u32>(&handle, base_addr, &autoblock_path)?;
+    println!("CTRL + C or CTRL + D to quit.\r");
+    println!("END to toggle autoblock.\r");
 
-    let mut enable_autoblock = false;
+    let current_value = unsafe { autoblock_member.read() }
+        .or_else(|e| {
+            eprintln!("Failed to read from `autoblock_member` in `{name}`\r");
+            cleanup_terminal()?;
+            Err(e)
+        })?;
+    let mut enable_autoblock = current_value == 0;
     loop {
-        if event::poll(Duration::from_millis(10))? {
-            if let Event::Key(key_event) = event::read()? {
+        if event::poll(Duration::from_millis(5))
+            .or_else(|e| {
+                eprintln!("Error when polling for console events: {e}\r");
+                cleanup_terminal()?;
+                Err(e)
+            })? {
+
+            if let Event::Key(key_event) = event::read()
+                .or_else(|e| {
+                    eprintln!("Error when reading console event: {e}\r");
+                    cleanup_terminal()?;
+                    Err(e)
+                })? {
+
                 if should_break(&key_event) {
                     break;
                 }
                 match key_event.code {
-                    KeyCode::Insert => {
-                        enable_autoblock = !enable_autoblock;
-                        if enable_autoblock {
-                            println!("Enabled autoblock");
-                        } else {
-                            println!("Disabled autoblock");
+                    KeyCode::End => {
+                        if key_event.kind == KeyEventKind::Press {
+                            enable_autoblock = !enable_autoblock;
+                            if enable_autoblock {
+                                println!("Enabled autoblock\r");
+                            } else {
+                                println!("Disabled autoblock\r");
+                            }
                         }
                     },
                     _ => (),
@@ -57,10 +101,10 @@ fn main() -> std::io::Result<()> {
         } else {
             let _ = autoblock_member.write(&1);
         }
+        std::thread::sleep(Duration::from_millis(5));
     }
 
-    terminal::disable_raw_mode()?;
-    execute!(std::io::stdout(), LeaveAlternateScreen)?;
+    cleanup_terminal()?;
     Ok(())
 }
 
@@ -75,3 +119,14 @@ fn should_break(key_event: &KeyEvent) -> bool {
     }
     false
 }
+
+fn setup_terminal() -> std::io::Result<()> {
+    terminal::enable_raw_mode()?;
+    Ok(())
+}
+
+fn cleanup_terminal() -> std::io::Result<()> {
+    terminal::disable_raw_mode()?;
+    Ok(())
+}
+

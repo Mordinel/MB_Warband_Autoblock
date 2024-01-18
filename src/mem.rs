@@ -20,7 +20,7 @@ pub fn resolve_pointer_path<T: Copy>(
                 result_addr = value;
             },
             Err(why) => {
-                eprintln!("Failed to read from member: {why}");
+                eprintln!("Failed to read from member: {why}\r");
                 return Err(std::io::ErrorKind::AddrNotAvailable.into());
             },
         }
