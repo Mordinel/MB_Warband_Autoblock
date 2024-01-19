@@ -96,7 +96,7 @@ pub fn get_base_address(pid: i32) -> std::io::Result<usize> {
 
     let mut address: vm_address_t = 1;
     let mut size: vm_size_t = 0;
-    let mut info: vm_region_basic_info = unsafe {std::mem::zeroed() };
+    let mut info: vm_region_basic_info = unsafe { std::mem::zeroed() };
     let mut info_count = std::mem::size_of_val(&info) as mach_msg_type_number_t;
     let mut obj_name: mach_port_t = 0;
 
@@ -112,7 +112,7 @@ pub fn get_base_address(pid: i32) -> std::io::Result<usize> {
         )
     } == KERN_SUCCESS {
         if info.protection & VM_PROT_EXECUTE != 0 {
-            return Ok(address) 
+            return Ok(address);
         }
         address += size;
     }

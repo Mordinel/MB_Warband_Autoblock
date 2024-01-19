@@ -54,7 +54,7 @@ fn main() -> std::io::Result<()> {
         })?;
 
     println!("CTRL + C or CTRL + D to quit.\r");
-    println!("END to toggle autoblock.\r");
+    println!("END or ; to toggle autoblock.\r");
 
     let current_value = unsafe { autoblock_member.read() }
         .or_else(|e| {
@@ -63,7 +63,17 @@ fn main() -> std::io::Result<()> {
             Err(e)
         })?;
     let mut enable_autoblock = current_value == 0;
+    if enable_autoblock {
+        println!("Autoblock already enabled\r");
+    } else {
+        println!("Autoblock NOT enabled\r");
+    }
     loop {
+        if proc::get_pid(name).is_err() {
+            eprintln!("Game closed, exiting\r");
+            break;
+        }
+
         if event::poll(Duration::from_millis(5))
             .or_else(|e| {
                 eprintln!("Error when polling for console events: {e}\r");
@@ -82,7 +92,7 @@ fn main() -> std::io::Result<()> {
                     break;
                 }
                 match key_event.code {
-                    KeyCode::End => {
+                    KeyCode::End | KeyCode::Char(';') => {
                         if key_event.kind == KeyEventKind::Press {
                             enable_autoblock = !enable_autoblock;
                             if enable_autoblock {
