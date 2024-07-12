@@ -19,11 +19,28 @@ use winapi::{
     },
     shared::minwindef::MAX_PATH,
 };
+use std::usize;
 #[cfg(target_os = "windows")]
 use std::ptr;
 
+#[cfg(target_os = "linux")]
+use std::{fs::File, io::{BufRead, BufReader, ErrorKind}};
+
 use process_memory::{ProcessHandle, TryIntoProcessHandle, Pid};
 use sysinfo::System;
+
+pub fn get_pid_and_base_addr(name: &str) -> std::io::Result<(i32, usize)> {
+    let pid = get_pid(name)?;
+
+    #[cfg(target_os = "macos")]
+    return Ok((pid, get_base_address(pid)?));
+
+    #[cfg(target_os = "windows")]
+    return Ok((pid, get_base_address(pid)?));
+
+    #[cfg(target_os = "linux")]
+    return Ok((pid, get_base_address(pid, name)?));
+}
 
 pub fn get_pid(name: &str) -> std::io::Result<i32> {
     let mut system = System::new_all();
@@ -38,6 +55,27 @@ pub fn get_pid(name: &str) -> std::io::Result<i32> {
 
 pub fn get_handle(pid: i32) -> std::io::Result<ProcessHandle> {
     Ok((pid as Pid).try_into_process_handle()?)
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_base_address(pid: i32, module_name: &str) -> std::io::Result<usize> {
+    let file_name = format!("/proc/{}/maps", pid);
+    let file = File::open(file_name)?;
+    let reader = BufReader::new(file);
+
+    for result in reader.lines() {
+        if let Ok(line) = result {
+            if line.trim().ends_with(module_name) {
+                let split_line: Vec<&str> = line.split("-").collect();
+                let address_str = split_line[0];
+                return match usize::from_str_radix(address_str, 16) {
+                    Ok(addr) => Ok(addr),
+                    Err(_) => Err(ErrorKind::NotFound.into())
+                };
+            }
+        }
+    }
+    Err(ErrorKind::NotFound.into())
 }
 
 #[cfg(target_os = "windows")]

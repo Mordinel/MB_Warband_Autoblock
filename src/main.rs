@@ -16,20 +16,13 @@ fn main() -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     let name = "mb_warband.exe";
 
-    let pid = proc::get_pid(name)
+    let (pid, base_addr) = proc::get_pid_and_base_addr(name)
         .or_else(|e| {
-            eprintln!("Failed to get pid for {name}: {e}\r");
+            eprintln!("Failed to get pid and base address for {name}: {e}\r");
             cleanup_terminal()?;
             Err(e)
         })?;
     println!("`{name}` PID: {pid}\r");
-
-    let base_addr = proc::get_base_address(pid)
-        .or_else(|e| {
-            eprintln!("Failed to get base address for {pid}: {e}\r");
-            cleanup_terminal()?;
-            Err(e)
-        })?;
     println!("`{name}` base address: 0x{base_addr:x}\r");
 
     let handle = proc::get_handle(pid)
@@ -44,6 +37,9 @@ fn main() -> std::io::Result<()> {
     let autoblock_path = vec![0x14651bc];
 
     #[cfg(target_os = "windows")]
+    let autoblock_path = vec![0x47c2f4];
+
+    #[cfg(target_os = "linux")]
     let autoblock_path = vec![0x47c2f4];
 
     let autoblock_member = mem::resolve_pointer_path::<u32>(&handle, base_addr, &autoblock_path)
